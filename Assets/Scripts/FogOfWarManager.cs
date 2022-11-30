@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -15,21 +14,28 @@ public class FogOfWarManager : MonoBehaviour
     private Mesh mesh;
     private Vector3[] vertices;
     private Color[] colors;
-    
-    private void Awake()
-    {
-        players = new List<Transform>();
-    }
 
     private void Start()
     {
         players = GameObject.FindGameObjectsWithTag("Player").Select(gameObj => gameObj.transform).ToList();
         Initialize();
+        timer = updateInterval;
     }
 
+    [SerializeField]
+    private float updateInterval;
+
+    private float timer;
+    
     private void Update()
     {
+        timer -= Time.deltaTime;
+
+        if (timer > 0)
+            return;
+        
         UpdateFog();
+        timer = updateInterval;
     }
     
     private void UpdateFog()
@@ -40,15 +46,18 @@ public class FogOfWarManager : MonoBehaviour
             
             Vector3 v = fogOfWarPlane.transform.TransformPoint(vertices[i]);
 
-            float minDistance = Mathf.Min(players.Select(player => Vector3.SqrMagnitude(v - player.position)).ToArray());
-            
-            // Distance is too far away
-            if (minDistance >= radiusSqr) 
-                continue;
-            
-            // Distance is close enough
-            float alpha = Mathf.Min(colors[i].a, minDistance / radiusSqr);
-            colors[i].a = alpha;
+            List<float> alphas = new();
+
+            foreach (Transform player in players)
+            {
+                float distance = Vector3.SqrMagnitude(v - player.position);
+                
+                if (distance < radiusSqr)
+                    alphas.Add(Mathf.Min(colors[i].a, distance / radiusSqr));
+            }
+
+            if (alphas.Count > 0)
+                colors[i].a = alphas.Min();
         }
 
         UpdateColor();
