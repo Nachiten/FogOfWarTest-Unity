@@ -7,8 +7,12 @@ public class FogOfWarManager : MonoBehaviour
     [SerializeField] private GameObject fogOfWarPlane;
     [SerializeField] private LayerMask fogLayer;
     [SerializeField] private float radius = 5f;
+    [SerializeField] private float enemyCheckRadiusOffset = -0.5f;
+    [SerializeField] private float updateInterval = 0.05f;
+    
     private float radiusSqr => radius * radius;
 
+    private List<MeshRenderer> enemies;
     private List<Transform> players;
     
     private Mesh mesh;
@@ -18,12 +22,12 @@ public class FogOfWarManager : MonoBehaviour
     private void Start()
     {
         players = GameObject.FindGameObjectsWithTag("Player").Select(gameObj => gameObj.transform).ToList();
-        Initialize();
+        enemies = GameObject.FindGameObjectsWithTag("Enemy").Select(gameObj => gameObj.GetComponent<MeshRenderer>()).ToList();
+       
         timer = updateInterval;
+        
+        InitializeFog();
     }
-
-    [SerializeField]
-    private float updateInterval;
 
     private float timer;
     
@@ -35,7 +39,21 @@ public class FogOfWarManager : MonoBehaviour
             return;
         
         UpdateFog();
+        CalculateVisibleEnemies();
+        
         timer = updateInterval;
+    }
+    
+    private void CalculateVisibleEnemies()
+    {
+        foreach (MeshRenderer enemyMeshRenderer in enemies)
+        {
+            enemyMeshRenderer.enabled = false;
+
+            foreach (Transform _ in players.Where(player =>
+                         Vector3.Distance(enemyMeshRenderer.transform.position, player.position) < radius + enemyCheckRadiusOffset))
+                enemyMeshRenderer.enabled = true;
+        }
     }
     
     private void UpdateFog()
@@ -46,15 +64,11 @@ public class FogOfWarManager : MonoBehaviour
             
             Vector3 v = fogOfWarPlane.transform.TransformPoint(vertices[i]);
 
-            List<float> alphas = new();
-
-            foreach (Transform player in players)
-            {
-                float distance = Vector3.SqrMagnitude(v - player.position);
-                
-                if (distance < radiusSqr)
-                    alphas.Add(Mathf.Min(colors[i].a, distance / radiusSqr));
-            }
+            List<float> alphas = (from player in players 
+                select Vector3.SqrMagnitude(v - player.position) 
+                into distance 
+                where distance < radiusSqr 
+                select Mathf.Min(colors[i].a, distance / radiusSqr)).ToList();
 
             if (alphas.Count > 0)
                 colors[i].a = alphas.Min();
@@ -63,7 +77,7 @@ public class FogOfWarManager : MonoBehaviour
         UpdateColor();
     }
     
-    private void Initialize()
+    private void InitializeFog()
     {
         mesh = fogOfWarPlane.GetComponent<MeshFilter>().mesh;
         vertices = mesh.vertices;
